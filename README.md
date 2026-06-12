@@ -19,8 +19,21 @@
 | 測定日時 | - | 自動記録 |
 | メモ | - | 任意(食事・運動など) |
 
+## 開発方法
+
+Node.js(LTS)が必要です。
+
+```bash
+npm install   # 初回のみ: 依存パッケージのインストール
+npm run dev   # 開発サーバー起動 → http://localhost:3000
+npm test      # テスト実行
+npm run build # 本番ビルド
+```
+
+詳しい計画は [docs/requirements.md](docs/requirements.md) を参照してください。
+
 ## ステータス
 
 - [x] リポジトリの作成
-- [ ] 技術スタックの選定
-- [ ] 最初のプロトタイプ
+- [x] 技術スタックの選定(Next.js + TypeScript)
+- [x] 最初のプロトタイプ(トレーニング記録・体脂肪率推定)
