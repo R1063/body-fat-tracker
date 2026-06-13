@@ -23,6 +23,7 @@ body {
   max-width: 520px;
   margin: 0 auto;
   padding: 0 8px;
+  overflow-x: auto;
 }
 
 .nav a {
