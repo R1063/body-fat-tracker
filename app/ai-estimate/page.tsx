@@ -5,6 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import { estimateBodyFat, type Sex } from "@/lib/bodyfat";
 import { BODYFAT_KEY, type BodyFatRecord } from "@/lib/records";
 import {
+  type Keypoint,
+  type Physique,
+  MIN_SCORE,
+  computePhysique,
+  experimentalEstimate,
+  getPoint,
+  hasUsableBody,
+} from "@/lib/physique";
+import {
   AI_CONSENT_KEY,
   AI_FREE_LIMIT,
   AI_USAGE_KEY,
@@ -13,19 +22,84 @@ import {
 } from "@/lib/usage";
 import { loadList, loadValue, saveList, saveValue } from "@/lib/storage";
 
+const MAX_CANVAS_WIDTH = 320;
+
+// 端末内で姿勢検出を行うための detector を使い回す。
+// 動的importで読み込むので tfjs は AI推定ページを開いたときだけダウンロードされる。
+let detectorPromise: Promise<{
+  estimatePoses: (img: HTMLCanvasElement) => Promise<{ keypoints: Keypoint[] }[]>;
+}> | null = null;
+
+async function getDetector() {
+  if (!detectorPromise) {
+    detectorPromise = (async () => {
+      const tf = await import("@tensorflow/tfjs-core");
+      await import("@tensorflow/tfjs-backend-webgl");
+      const poseDetection = await import("@tensorflow-models/pose-detection");
+      await tf.ready();
+      return poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+        modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+      });
+    })();
+  }
+  return detectorPromise;
+}
+
+function drawOverlay(canvas: HTMLCanvasElement, keypoints: Keypoint[]) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const pairs: [string, string][] = [
+    ["left_shoulder", "right_shoulder"],
+    ["left_hip", "right_hip"],
+    ["left_shoulder", "left_hip"],
+    ["right_shoulder", "right_hip"],
+  ];
+  ctx.strokeStyle = "#38a169";
+  ctx.lineWidth = 3;
+  for (const [a, b] of pairs) {
+    const pa = getPoint(keypoints, a);
+    const pb = getPoint(keypoints, b);
+    if (pa && pb) {
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = "#2b6cb0";
+  for (const k of keypoints) {
+    if ((k.score ?? 0) >= MIN_SCORE) {
+      ctx.beginPath();
+      ctx.arc(k.x, k.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+type Analysis =
+  | { state: "idle" }
+  | { state: "analyzing" }
+  | { state: "done"; detected: boolean; physique: Physique | null }
+  | { state: "error"; message: string };
+
 export default function AiEstimatePage() {
   const [loaded, setLoaded] = useState(false);
   const [consented, setConsented] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const [used, setUsed] = useState(0);
 
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [hasPhoto, setHasPhoto] = useState(false);
+  const [analysis, setAnalysis] = useState<Analysis>({ state: "idle" });
   const [sex, setSex] = useState<Sex>("male");
   const [age, setAge] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [weightKg, setWeightKg] = useState("");
-  const [result, setResult] = useState<number | null>(null);
+  const [result, setResult] = useState<{ base: number; experimental: number | null } | null>(
+    null,
+  );
   const [error, setError] = useState("");
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -43,9 +117,47 @@ export default function AiEstimatePage() {
   function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setResult(null);
+    setError("");
     const reader = new FileReader();
-    reader.onload = () => setPhotoUrl(typeof reader.result === "string" ? reader.result : null);
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const scale = Math.min(MAX_CANVAS_WIDTH / img.width, 1);
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        setHasPhoto(true);
+        void analyzePhoto(canvas);
+      };
+      img.src = typeof reader.result === "string" ? reader.result : "";
+    };
     reader.readAsDataURL(file);
+  }
+
+  async function analyzePhoto(canvas: HTMLCanvasElement) {
+    setAnalysis({ state: "analyzing" });
+    try {
+      const detector = await getDetector();
+      const poses = await detector.estimatePoses(canvas);
+      const keypoints = poses[0]?.keypoints ?? [];
+      const detected = hasUsableBody(keypoints);
+      if (detected) drawOverlay(canvas, keypoints);
+      setAnalysis({
+        state: "done",
+        detected,
+        physique: detected ? computePhysique(keypoints) : null,
+      });
+    } catch {
+      setAnalysis({
+        state: "error",
+        message: "端末内のAIモデルを読み込めませんでした。推定は入力値のみで行います。",
+      });
+    }
   }
 
   function estimate(e: React.FormEvent) {
@@ -53,18 +165,22 @@ export default function AiEstimatePage() {
     setError("");
     setResult(null);
     if (!canUseFree(used)) return;
-    if (!photoUrl) {
+    if (!hasPhoto) {
       setError("写真を選択してください");
       return;
     }
     try {
-      const percent = estimateBodyFat({
+      const base = estimateBodyFat({
         sex,
         age: Number(age),
         heightCm: Number(heightCm),
         weightKg: Number(weightKg),
       });
-      setResult(percent);
+      const physique = analysis.state === "done" ? analysis.physique : null;
+      const experimental = physique
+        ? experimentalEstimate(base, physique.shoulderHipRatio)
+        : null;
+      setResult({ base, experimental });
       const next = used + 1;
       setUsed(next);
       saveValue(AI_USAGE_KEY, next);
@@ -74,18 +190,21 @@ export default function AiEstimatePage() {
   }
 
   function saveResult() {
-    if (result == null) return;
+    if (!result) return;
     const history = loadList<BodyFatRecord>(BODYFAT_KEY);
     const record: BodyFatRecord = {
       id: crypto.randomUUID(),
       date: new Date().toLocaleDateString("sv-SE"),
-      percent: result,
+      percent: result.experimental ?? result.base,
       weightKg: Number(weightKg),
     };
     saveList(BODYFAT_KEY, [record, ...history]);
     setResult(null);
-    setPhotoUrl(null);
+    setHasPhoto(false);
+    setAnalysis({ state: "idle" });
     if (fileRef.current) fileRef.current.value = "";
+    const canvas = canvasRef.current;
+    canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   if (!loaded) return null;
@@ -106,8 +225,8 @@ export default function AiEstimatePage() {
               サーバーへ送信・保存されることはありません。
             </li>
             <li>
-              現時点のβ版は写真そのものからの自動判定はまだ行っておらず、
-              入力した数値(年齢・身長・体重)に基づく推定です。写真は確認用に表示するだけです。
+              写真からは姿勢検出AIで体型の特徴(肩幅・腰幅の比)を抽出し、推定の参考にします。
+              ただしこの補正は実験的なもので、科学的に検証されたものではありません。
             </li>
             <li>無料でお試しいただけるのは <strong>{AI_FREE_LIMIT}回</strong> までです。</li>
           </ul>
@@ -137,7 +256,6 @@ export default function AiEstimatePage() {
     );
   }
 
-  // --- 回数を使い切った状態 ---
   const exhausted = remaining === 0;
 
   return (
@@ -148,8 +266,8 @@ export default function AiEstimatePage() {
         <p style={{ margin: 0, fontSize: 14 }}>
           📷 <strong>β版のお知らせ</strong>
           <br />
-          現在は写真からの自動判定ではなく、入力値に基づく推定です。今後のスプリントで
-          画像解析の精度を高めていきます。
+          写真は端末内の姿勢検出AIで解析し、体型の特徴を推定の参考にします。
+          実験的な補正であり、精度向上には今後のデータ学習が必要です。
         </p>
       </div>
 
@@ -171,7 +289,7 @@ export default function AiEstimatePage() {
       ) : (
         <form className="card" onSubmit={estimate}>
           <div className="field">
-            <label htmlFor="photo">写真を選択</label>
+            <label htmlFor="photo">全身が写った写真を選択</label>
             <input
               id="photo"
               ref={fileRef}
@@ -180,14 +298,37 @@ export default function AiEstimatePage() {
               onChange={onPickPhoto}
             />
           </div>
-          {photoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={photoUrl}
-              alt="プレビュー"
-              style={{ width: "100%", borderRadius: 8, marginBottom: 12 }}
-            />
+
+          <canvas
+            ref={canvasRef}
+            style={{
+              width: "100%",
+              borderRadius: 8,
+              marginBottom: 8,
+              display: hasPhoto ? "block" : "none",
+              background: "#edf2f7",
+            }}
+          />
+
+          {analysis.state === "analyzing" && (
+            <p className="note">🔍 写真を解析しています…(初回はモデルの読み込みに数秒かかります)</p>
           )}
+          {analysis.state === "done" && analysis.detected && analysis.physique && (
+            <div style={{ fontSize: 13, color: "#2f855a", marginBottom: 8 }}>
+              ✅ 全身を検出しました(肩幅:腰幅の比 = {analysis.physique.shoulderHipRatio})
+            </div>
+          )}
+          {analysis.state === "done" && !analysis.detected && (
+            <div style={{ fontSize: 13, color: "#c05621", marginBottom: 8 }}>
+              ⚠️ 全身(両肩・両腰)をはっきり検出できませんでした。正面・全身の写真だと精度が上がります。入力値のみでも推定できます。
+            </div>
+          )}
+          {analysis.state === "error" && (
+            <div style={{ fontSize: 13, color: "#c05621", marginBottom: 8 }}>
+              ⚠️ {analysis.message}
+            </div>
+          )}
+
           <div className="row">
             <div className="field">
               <label htmlFor="sex">性別</label>
@@ -240,7 +381,7 @@ export default function AiEstimatePage() {
               />
             </div>
           </div>
-          <button className="btn" type="submit">
+          <button className="btn" type="submit" disabled={analysis.state === "analyzing"}>
             推定する(残り{remaining}回)
           </button>
           {error && <p style={{ color: "#c53030" }}>{error}</p>}
@@ -249,9 +390,26 @@ export default function AiEstimatePage() {
 
       {result != null && (
         <div className="card result">
-          <div className="value">{result}%</div>
-          <p className="note">
-            β版の推定値です。入力データに基づく概算であり、実測値とは差が出ることがあります。
+          <p className="note" style={{ marginBottom: 0 }}>入力値ベースの推定</p>
+          <div className="value">{result.base}%</div>
+          {result.experimental != null && (
+            <div
+              style={{
+                marginTop: 8,
+                paddingTop: 8,
+                borderTop: "1px solid #edf2f7",
+              }}
+            >
+              <p className="note" style={{ marginBottom: 0 }}>
+                写真の体型特徴を加えた実験的推定
+              </p>
+              <div style={{ fontSize: 28, fontWeight: 700, color: "#38a169" }}>
+                {result.experimental}%
+              </div>
+            </div>
+          )}
+          <p className="note" style={{ marginTop: 8 }}>
+            β版の推定値です。実験的な補正であり、体組成計などの実測値とは差が出ます。
           </p>
           <button className="btn" type="button" onClick={saveResult}>
             この結果を記録する
