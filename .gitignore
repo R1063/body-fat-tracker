@@ -10,7 +10,10 @@ Desktop.ini
 # Claude Code ローカル設定
 .claude/settings.local.json
 
-# 依存関係・ビルド成果物(将来用)
+# 依存関係・ビルド成果物
 node_modules/
+.next/
+out/
 dist/
 build/
+*.tsbuildinfo
