@@ -14,6 +14,10 @@ export default function Home() {
           <strong>📊 体脂肪率の推定</strong>
           年齢・身長・体重から体脂肪率を推定して記録できます
         </Link>
+        <Link href="/progress">
+          <strong>📈 推移と目標</strong>
+          体脂肪率・体重のグラフと目標の達成度を確認できます
+        </Link>
       </div>
       <p className="note">
         データはこの端末のブラウザ内にのみ保存されます(スプリント1時点)。

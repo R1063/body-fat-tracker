@@ -28,8 +28,9 @@ body {
 .nav a {
   color: #e2e8f0;
   text-decoration: none;
-  padding: 12px 14px;
-  font-size: 15px;
+  padding: 12px 10px;
+  font-size: 14px;
+  white-space: nowrap;
 }
 
 .nav a:hover {
@@ -160,6 +161,43 @@ h2 {
   color: #a0aec0;
   text-align: center;
   padding: 16px 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tab {
+  flex: 1;
+  font-size: 14px;
+  padding: 8px;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  background: #fff;
+  color: #4a5568;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: #2b6cb0;
+  border-color: #2b6cb0;
+  color: #fff;
+  font-weight: 600;
+}
+
+.progressbar {
+  height: 12px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.progressbar-fill {
+  height: 100%;
+  background: #38a169;
+  transition: width 0.3s;
 }
 
 .home-links {

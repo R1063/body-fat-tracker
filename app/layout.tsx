@@ -23,6 +23,7 @@ export default function RootLayout({
             <Link href="/">ホーム</Link>
             <Link href="/training">トレーニング</Link>
             <Link href="/bodyfat">体脂肪率</Link>
+            <Link href="/progress">推移</Link>
           </nav>
         </header>
         <main className="container">{children}</main>
