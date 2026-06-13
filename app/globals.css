@@ -201,6 +201,22 @@ h2 {
   transition: width 0.3s;
 }
 
+.guide summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.guide ul {
+  padding-left: 18px;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.guide li {
+  margin-bottom: 6px;
+}
+
 .footer {
   max-width: 520px;
   margin: 24px auto;

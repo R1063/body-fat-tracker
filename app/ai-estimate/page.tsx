@@ -287,6 +287,33 @@ export default function AiEstimatePage() {
           </p>
         </div>
       ) : (
+        <>
+        <details className="guide card">
+          <summary>📸 写真を撮るコツ(タップで開く)</summary>
+          <ul>
+            <li>
+              <strong>正面・全身</strong>:頭からつま先までフレームに入れ、まっすぐ正面を向く
+            </li>
+            <li>
+              <strong>カメラの高さ</strong>:腰くらいの高さで床と垂直に。床置き＋タイマー撮影が安定します
+            </li>
+            <li>
+              <strong>服装をそろえる</strong>:体にフィットした服、または毎回同じ服装に。
+              脱ぐ量で結果が変わるため、条件を一定にするのがコツです
+            </li>
+            <li>
+              <strong>明るく・背景はシンプル</strong>:明るい場所で、無地の壁を背にすると検出が安定します
+            </li>
+            <li>
+              <strong>毎回同じ条件で</strong>:距離・服装・明るさをそろえると、
+              絶対値より大事な「変化」を比べられます
+            </li>
+          </ul>
+          <p className="note">
+            β版では1枚の写真から正確な体脂肪率は出せません。
+            同じ条件で撮って「変化」を追うのがおすすめです。
+          </p>
+        </details>
         <form className="card" onSubmit={estimate}>
           <div className="field">
             <label htmlFor="photo">全身が写った写真を選択</label>
@@ -386,6 +413,7 @@ export default function AiEstimatePage() {
           </button>
           {error && <p style={{ color: "#c53030" }}>{error}</p>}
         </form>
+        </>
       )}
 
       {result != null && (
