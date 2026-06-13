@@ -28,6 +28,11 @@ export default function RootLayout({
           </nav>
         </header>
         <main className="container">{children}</main>
+        <footer className="footer">
+          <Link href="/legal/terms">利用規約</Link>
+          <span aria-hidden="true">・</span>
+          <Link href="/legal/privacy">プライバシーポリシー</Link>
+        </footer>
       </body>
     </html>
   );

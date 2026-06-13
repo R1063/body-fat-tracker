@@ -130,7 +130,8 @@ export default function AiEstimatePage() {
           </button>
         </div>
         <p className="note">
-          正式な利用規約・プライバシーポリシーは公開前に整備します。
+          詳しくは<Link href="/legal/terms">利用規約</Link>・
+          <Link href="/legal/privacy">プライバシーポリシー</Link>をご確認ください。
         </p>
       </>
     );
