@@ -19,6 +19,12 @@
 | 測定日時 | - | 自動記録 |
 | メモ | - | 任意(食事・運動など) |
 
+## 公開URL
+
+https://r1063.github.io/body-fat-tracker/
+
+`main` ブランチにマージすると、GitHub Actions が自動でテスト・ビルド・デプロイを行います。
+
 ## 開発方法
 
 Node.js(LTS)が必要です。

@@ -2,16 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { estimateBodyFat, type Sex } from "@/lib/bodyfat";
+import { BODYFAT_KEY as STORAGE_KEY, type BodyFatRecord } from "@/lib/records";
 import { loadList, saveList } from "@/lib/storage";
-
-interface BodyFatRecord {
-  id: string;
-  date: string;
-  percent: number;
-  weightKg: number;
-}
-
-const STORAGE_KEY = "bodyfat-records";
 
 export default function BodyFatPage() {
   const [history, setHistory] = useState<BodyFatRecord[]>([]);
